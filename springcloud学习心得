@@ -1,0 +1,239 @@
+一.搭建父工程springcloud-parent.环境:jdk1.8  maven:3.5.4  springboot:1.5.9.RELEASE
+    1.删除掉src目录(因为父工程只做管理,不写代码)
+    2.配置maven
+        file--settings--Build,Execution,Deployment--Build Tools--Maven
+        	Maven home dirctory :D:/xm/maven/apache-maven-3.5.4
+        	User settings file :D:\xm\maven\apache-maven-3.5.4\conf\settings.xml
+        	Local repository :D:\xm\repository
+    3.配置pom.xml,将创建的子模块都加入到pom.xml文件中
+        <!-- 加入子模块 -->
+            <modules>
+                <module>eureka-server</module>  <!-- 服务注册中心 -->
+                <module>eureka-provide</module> <!-- 服务发现-服务提供者 -->
+                <module>ribbon</module>         <!-- 服务发现-服务消费者:ribbon -->
+                <module>feign</module>          <!-- 服务发现-服务消费者:feign -->
+            </modules>
+
+二.搭建子工程eureka-server(服务注册中心),该模块为springboot工程
+    1.修改pom.xml文件中,原有的<parent>标签,改为当前父工程的一些信息
+        <!-- parent写的就是父工程的一些信息 -->
+        <parent>
+            <groupId>cn.zjy.springcloud.demo</groupId>
+            <artifactId>springcloud-parent</artifactId>
+            <version>1.0-SNAPSHOT</version>
+            <relativePath/> <!-- lookup parent from repository -->
+        </parent>
+
+        添加eureka的依赖
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-eureka-server</artifactId>
+        </dependency>
+    2.在服务启动类添加注解 @EnableEurekaServer 表示这是一个 服务注册中心
+    3.添加 application.properties 信息
+        spring.application.name=eureka-server    该注册中心的名称
+        server.port=2080                         启动注册中心的端口号
+        eureka.instance.hostname=localhost       设置当前实例的主机名称
+        eureka.client.fetch-registry=false       屏蔽注册信息
+        eureka.client.register-with-eureka=false 禁止自己当做服务注册,否则也会把自己当作客户端来注册
+
+三.搭建子工程eureka-provide(服务提供者),该模块为springboot工程
+    1.修改pom.xml文件中,原有的<parent>标签,改为当前父工程的一些信息
+        <!-- parent写的就是父工程的一些信息 -->
+        <parent>
+            <groupId>cn.zjy.springcloud.demo</groupId>
+            <artifactId>springcloud-parent</artifactId>
+            <version>1.0-SNAPSHOT</version>
+            <relativePath/> <!-- lookup parent from repository -->
+        </parent>
+
+        添加依赖
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-eureka</artifactId>
+        </dependency>
+    2.在服务启动类添加注解 @EnableEurekaClient 表示这是一个 服务发现-服务提供者
+    3.添加 application.properties 信息
+        server.port=2081                                启动注册中心的端口号
+        此路径得指向服务注册中心的路径
+        eureka.client.service-url.defaultZone=http://localhost:2080/eureka/
+        spring.application.name=eureka-provide          该服务提供者名称
+        provide.message=Hello SpringCloud 111           测试数据
+    4.创建包,类ProvideController.编写方法,启动eureka-server,启动eureka-provide.访问路径
+        说明:访问路径:http://localhost:2081/provide/getMessage?name=张三   得到一个正常显示
+
+四.搭建子工程ribbon(服务消费者),该模块为springboot工程
+    1.修改pom.xml文件中,原有的<parent>标签,改为当前父工程的一些信息
+        <!-- parent写的就是父工程的一些信息 -->
+        <parent>
+            <groupId>cn.zjy.springcloud.demo</groupId>
+            <artifactId>springcloud-parent</artifactId>
+            <version>1.0-SNAPSHOT</version>
+            <relativePath/> <!-- lookup parent from repository -->
+        </parent>
+
+        添加ribbon依赖
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-ribbon</artifactId>
+        </dependency>
+        添加服务提供者依赖
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-eureka</artifactId>
+        </dependency>
+    2.在服务启动类添加注解 @EnableDiscoveryClient 表示这是一个 服务消费者
+      在启动类中添加一个实例化Bean RestTemplate
+            @Bean
+            @LoadBalanced
+            RestTemplate restTemplate(){
+                return new RestTemplate();
+            }
+    3.添加 application.properties 信息
+            server.port=2087                        启动注册中心的端口号
+            #此路径得指向服务注册中心的路径
+            eureka.client.service-url.defaultZone=http://localhost:2080/eureka/
+            spring.application.name=ribbon          该消费者名称
+    4.创建service包,并创建RibbonService类
+        写一个方法
+        @Autowired
+        private RestTemplate restTemplate;
+
+        public String welcomeService(String name){
+            //此url内容为:http://(客户端spring.application.name名称:eureka-provide)/(要跳到的请求:provide/getMessage)
+            return restTemplate.getForObject("http://eureka-provide/provide/getMessage?name=" + name, String.class);
+        }
+
+        说明: url中 "http://eureka-provide/provide/getMessage?name=" + name
+            eureka-provide:这是注册中心(eureka-server)名称 spring.application.name 的值
+            provide/getMessage:这是服务提供者(eureka-provide)的 @RequestMapping("/provide/getMessage")映射
+            ?name= + name:url拼接的参数
+    5.创建controller包,并创建RibbonController类
+        写一个方法
+         @Autowired
+         private RibbonService ribbonService;
+
+         @RequestMapping("/hello/cloud")
+         public String welcomeController(@RequestParam String name){
+             return ribbonService.welcomeService(name);
+         }
+    6.测试结果
+        先启动eureka-server
+        然后启动eureka-provide
+        修改eureka-provide端口和入参数据再启动一次
+        启动ribbon服务
+        访问多次 http://localhost:2087/hello/cloud?name=zhangzhang
+        结果:刷新一次该请求,会得到不同的返回结果,说明该项目实现了负载均衡
+
+五.搭建子工程feign(声明式的伪Http客户端),该模块为springboot工程
+    1.修改pom.xml文件中,原有的<parent>标签,改为当前父工程的一些信息
+          <!-- parent写的就是父工程的一些信息 -->
+          <parent>
+              <groupId>cn.zjy.springcloud.demo</groupId>
+              <artifactId>springcloud-parent</artifactId>
+              <version>1.0-SNAPSHOT</version>
+              <relativePath/> <!-- lookup parent from repository -->
+          </parent>
+
+          添加feign依赖
+          <dependency>
+              <groupId>org.springframework.cloud</groupId>
+              <artifactId>spring-cloud-starter-feign</artifactId>
+          </dependency>
+          <dependency>
+              <groupId>com.netflix.feign</groupId>
+              <artifactId>feign-slf4j</artifactId>
+              <version>8.14.4</version>
+          </dependency>
+
+          添加服务提供者依赖
+          <dependency>
+              <groupId>org.springframework.cloud</groupId>
+              <artifactId>spring-cloud-starter-eureka</artifactId>
+          </dependency>
+    2.在服务启动类添加注解
+          @EnableFeignClients //标明这是feign
+          @EnableDiscoveryClient
+    3.添加 application.properties 信息
+          server.port=2086                  服务端口号
+          spring.application.name=feign     feign的服务名称
+          #此路径得指向服务注册中心的路径
+          eureka.client.service-url.defaultZone=http://localhost:2080/eureka/
+          feign.hystrix.enabled=true        打开断路器
+    4.创建service包,并创建FeignService接口
+        接口上打注解@FeignClient(value = "eureka-provide")
+            说明:value指向的是服务提供者的名称(eureka-provide工程的spring.application.name)
+        写一个接口
+            @RequestMapping(value = "/provide/getMessage")
+            String welcomeClientOne(@RequestParam("name") String name);
+                说明:/provide/getMessage 映射的是eureka-provide工程的@RequestMapping
+    5.创建controller包,并创建FeignController类
+        写一个方法
+        @Autowired
+        private FeignService feignService;
+
+        @RequestMapping("/provide/getMessage")
+        public String getMessage(@RequestParam(value = "name", required = true) String name){
+            return feignService.welcomeClientOne(name);
+        }
+            说明:@RequestMapping(value = "/provide/getMessage")这个路径和他要去的路径要一样
+                他要去的路径是eureka-provide的controller
+                访问路径为:http://localhost:2086/provide/getMessage?name=dddddd
+    6.测试结果
+        先启动eureka-server
+        然后启动eureka-provide
+        修改eureka-provide端口和入参数据再启动一次
+        启动feign服务
+        访问多次 http://localhost:2086/provide/getMessage?name=dddddd
+        结果:刷新一次该请求,会得到不同的返回结果,说明该项目实现了负载均衡
+
+六.Hystrix(断路器),没有搭建子工程,而是在ribbon工程和feign工程中使用
+    在ribbon工程添加断路器
+        1.给ribbon工程的pom.xml文件中添加断路器Hystrix的依赖
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-starter-netflix-hystrix</artifactId>
+                <version>1.4.3.RELEASE</version>
+            </dependency>
+        2.给ribbon的启动类加上注解 @EnableHystrix  //开启断路器——Hystrix
+        3.给RibbonService类的方法上添加一个注解 @HystrixCommand(fallbackMethod = "error")
+            说明:@HystrixCommand 断路器注解,指定断路会调用error()方法
+        4.在RibbonService类中添加一个error()方法,实现断路要跳转的方法
+            public String error(String name){
+                //TODO 如果程序调用了error方法,则可以实现发送邮件,发送短信业务来提醒服务器出现故障
+                return "出错了! " + name + "断路器起作用了!";
+            }
+        5.测试结果
+            先启动eureka-server服务
+            然后启动eureka-provide服务
+            启动ribbon服务
+            访问 http://localhost:2087/hello/cloud?name=zhangzhang    显示结果正常
+            关闭掉eureka-provide服务
+            访问 http://localhost:2087/hello/cloud?name=zhangzhang    显示结果异常(会显示error()方法里的内容)
+
+    在feign工程添加断路器
+        1.feign工程自动集成断路器Hystrix的依赖,不需要手动添加依赖
+        2.给FeignService接口的注解上添加fallback
+            @FeignClient(value = "eureka-provide", fallback = FeignError.class)
+                说明:fallback = FeignError.class 指向一个类.自己手动写个FeignError类
+        3.新建hystrix包,创建FeignError类并实现FeignService接口
+            public String welcomeClientOne(String name) {
+                //TODO 如果进入了Hystrix断路器方法,会执行一些发送邮件,发送短信给管理员
+                //TODO 给请求返回固定的html页面
+                return "Hystrix断路器, Feign模块出错, " + name + ":不好意思";
+            }
+        4.测试结果
+            先启动eureka-server服务
+            然后启动eureka-provide服务
+            启动feign服务
+            访问 http://localhost:2086/provide/getMessage?name=dddddd 正常显示
+            关闭掉eureka-provide服务
+            访问 http://localhost:2086/provide/getMessage?name=dddddd 异常显示(会显示FeignError类的内容)
+
+
+
+
+
+
+
+
