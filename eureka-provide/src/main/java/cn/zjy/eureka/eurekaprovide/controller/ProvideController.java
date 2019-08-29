@@ -25,6 +25,7 @@ public class ProvideController {
      */
     @RequestMapping("/provide/getMessage")
     public String getMessage(@RequestParam String name){
-        return name + ": 欢迎你, 想对你说: " + message;
+
+        return name + ": 欢迎你, 想对你说,说的话有些多了啊,也是为了构建jenkins: " + message;
     }
 }
